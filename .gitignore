@@ -12,5 +12,6 @@ __pycache__
 *.lock
 *.DS_Store
 dane5
-dane6
+dane6/
 teoria/lab6/structure-from-motion-master
+dane7

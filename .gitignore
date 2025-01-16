@@ -1,5 +1,3 @@
-/dane1-4
-
 # standard gitignore
 *.pyc
 __pycache__
@@ -11,8 +9,4 @@ __pycache__
 *.pid
 *.lock
 *.DS_Store
-dane5
-dane6/
-teoria/lab6/structure-from-motion-master
-dane7
-dane8
+data/

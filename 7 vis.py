@@ -10,20 +10,20 @@ def create_heatmap(results, score_thresholds, nms_thresholds, plot_dir):
     for r in results:
         i = score_thresholds.index(r['score_thresh'])
         j = nms_thresholds.index(r['nms_thresh'])
-        results_array[i, j] = r['map']
+        results_array[i, j] = r['ap']
 
     plt.figure(figsize=(10, 8))
     plt.imshow(results_array, cmap='viridis')
-    plt.colorbar(label='mAP')
+    plt.colorbar(label='AP')
     plt.xticks(range(len(nms_thresholds)), nms_thresholds)
     plt.yticks(range(len(score_thresholds)), score_thresholds)
     plt.xlabel('NMS Threshold')
     plt.ylabel('Score Threshold')
-    plt.title('mAP for Different Parameter Combinations')
+    plt.title('AP for Different Parameter Combinations')
     plt.savefig(plot_dir / 'parameter_heatmap.png')
     plt.close()
 
-    print("\nText-based heatmap of mAP scores:")
+    print("\nText-based heatmap of AP scores:")
     print("\nNMS thresh ->")
     print("Score     {:.1f}   {:.1f}   {:.1f}   {:.1f}   {:.1f}   {:.1f}   {:.1f}   {:.1f}   {:.1f}".format(*nms_thresholds))
     print("thresh")
@@ -160,28 +160,28 @@ def visualize_proposals_and_predictions(img, proposals, predictions, dataset, sa
 def visualize_rpn_nms_analysis(results, plot_dir, print_results=True):
     plt.figure(figsize=(10, 6))
     plt.plot([r['rpn_nms_thresh'] for r in results], 
-            [r['map'] for r in results], 
+            [r['ap'] for r in results], 
             marker='o')
     plt.xlabel('RPN NMS Threshold')
-    plt.ylabel('mAP')
+    plt.ylabel('AP')
     plt.title('Effect of RPN NMS Threshold on Detection Performance')
     plt.grid(True)
-    plt.savefig(plot_dir / 'rpn_nms_map.png')
+    plt.savefig(plot_dir / 'rpn_nms_ap.png')
     plt.close()
 
     if print_results:
         # Print results table
         print("\nResults Summary:")
-        print("RPN NMS Threshold | mAP")
+        print("RPN NMS Threshold | AP")
         print("-" * 30)
         for r in results:
-            print(f"{r['rpn_nms_thresh']:15.2f} | {r['map']:.4f}")
+            print(f"{r['rpn_nms_thresh']:15.2f} | {r['ap']:.4f}")
 
 
 def visualize_timing_analysis(timing_results, plot_dir, rpn_nms_thresholds):
 
     plt.figure(figsize=(12, 6))
-    for metric in ['rpn_time', 'roi_time', 'total_time', 'conv_time']:
+    for metric in ['rpn_time', 'roi_time', 'total_time', 'backbone_time']:
         avg_times = [np.mean([r[metric] for r in timing_results if r['rpn_nms_thresh'] == t]) 
                     for t in rpn_nms_thresholds]
         plt.plot(rpn_nms_thresholds, avg_times, marker='o', label=metric)
@@ -194,5 +194,4 @@ def visualize_timing_analysis(timing_results, plot_dir, rpn_nms_thresholds):
     plt.tight_layout()
     plt.savefig(plot_dir / 'rpn_nms_timing.png')
     plt.close()
-
 

@@ -98,8 +98,8 @@ SEED         = 420
 SKIP_TRAINING = True
 CHECKPOINT_PATH = os.path.join(OUTPUT_DIR, "checkpoint.pth")
 
-RUN_ZADANIE_1  = True
-RUN_ZADANIE_2a = True
+RUN_ZADANIE_1  = False
+RUN_ZADANIE_2a = False
 RUN_ZADANIE_2b = True
 
 # Zaczytanie datasetów
@@ -222,18 +222,15 @@ to_pil_image(box.detach()).save(os.path.join(OUTPUT_DIR, f"prediction.jpg"))
 
 
 def evaluate_model_params(model, val_loader, score_thresh, nms_thresh, device):
-    # Store original thresholds
+    
     original_score_thresh = model.roi_heads.score_thresh
     original_nms_thresh = model.roi_heads.nms_thresh
     
-    # Set new thresholds
     model.roi_heads.score_thresh = score_thresh
     model.roi_heads.nms_thresh = nms_thresh
     
-    # Evaluate
     metrics = evaluate(model, val_loader, device=device)
     
-    # Restore original thresholds
     model.roi_heads.score_thresh = original_score_thresh
     model.roi_heads.nms_thresh = original_nms_thresh
     
@@ -263,15 +260,6 @@ def visualize_predictions(model, image_path, score_thresh, nms_thresh, dataset, 
     return box, len(prediction['boxes'])  # Return both the box and number of predictions
 
 
-test_images = [
-    os.path.join(DATASET_ROOT, 'valid/IMG_0293_JPG.rf.f29eab19f33f4c8ef04f9188d7ff1de7.jpg'),
-    os.path.join(DATASET_ROOT, 'valid/IMG_0310_JPG.rf.6cf8e3d4550948ac9e5efafc66f1cdfd.jpg'),
-    os.path.join(DATASET_ROOT, 'test/IMG_0169_JPG.rf.b1530b71278953ad465d06863135c71e.jpg'),
-    os.path.join(WILD_DIR,     'chesscom_fide.jpeg'),
-    os.path.join(WILD_DIR,     'chesscom_fide.jpeg'),
-    os.path.join(WILD_DIR,     'shop.jpg'),
-]
-
 def evaluate_parameters(model, val_loader, score_thresholds, nms_thresholds, device):
     results = []
     total_combinations = len(score_thresholds) * len(nms_thresholds)
@@ -284,13 +272,23 @@ def evaluate_parameters(model, val_loader, score_thresholds, nms_thresholds, dev
                     results.append({
                         'score_thresh': score_t,
                         'nms_thresh': nms_t,
-                        'map': metrics.coco_eval['bbox'].stats[0]
+                        'ap': metrics.coco_eval['bbox'].stats[0]
                     })
                 except Exception as e:
                     print(f"Error evaluating score_thresh={score_t}, nms_thresh={nms_t}: {str(e)}")
                 pbar.update(1)
     
     return results
+
+
+test_images = [
+    os.path.join(DATASET_ROOT, 'valid/IMG_0293_JPG.rf.f29eab19f33f4c8ef04f9188d7ff1de7.jpg'),
+    os.path.join(DATASET_ROOT, 'valid/IMG_0310_JPG.rf.6cf8e3d4550948ac9e5efafc66f1cdfd.jpg'),
+    os.path.join(DATASET_ROOT, 'test/IMG_0169_JPG.rf.b1530b71278953ad465d06863135c71e.jpg'),
+    os.path.join(WILD_DIR,     'chesscom_fide.jpeg'),
+    os.path.join(WILD_DIR,     'shop.jpg'),
+    os.path.join(WILD_DIR,     'moje.png'),
+]
 
 
 if RUN_ZADANIE_1:
@@ -357,18 +355,18 @@ def get_rpn_proposals(model, image_path):
     
     model.eval()
     with torch.no_grad():
-        # Get transformed images (needed for inverse transform later)
+
         transformed_images, _ = model.transform(images, None)
         
-        # Get features from backbone
+        # features from backbone
         features = model.backbone(transformed_images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([("0", features)])
         
-        # Get RPN proposals
+        # RPN proposals
         proposals, _ = model.rpn(transformed_images, features, None)
         
-        # Get final predictions
+        # final predictions
         detections, _ = model.roi_heads(features, proposals, transformed_images.image_sizes, None)
         detections = model.transform.postprocess(detections, transformed_images.image_sizes, [img.shape[1:]])
         
@@ -386,15 +384,12 @@ if RUN_ZADANIE_2a:
     print("\n\n# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #")
     print("Zadanie 2a\n")
 
-    # Set default thresholds
     model.roi_heads.score_thresh = SCORE_THRESH
     model.roi_heads.nms_thresh = NMS_THRESH
 
-    # Create output directory
     plot_dir = Path(OUTPUT_DIR) / 'zad2a_rpn_analysis'
     plot_dir.mkdir(exist_ok=True)
 
-    # Process each test image
     for img_path in test_images:
         print(f"Processing {Path(img_path).name}")
         img, proposals, predictions = get_rpn_proposals(model, img_path)
@@ -414,7 +409,6 @@ if RUN_ZADANIE_2a:
 
 
 def get_rpn_proposals_with_nms(model, image_path, rpn_nms_thresh):
-
     img = read_image(image_path)
     preprocess = M.FasterRCNN_ResNet50_FPN_Weights.COCO_V1.transforms()
     processed_img = preprocess(img)
@@ -423,27 +417,28 @@ def get_rpn_proposals_with_nms(model, image_path, rpn_nms_thresh):
     model.eval()
     times = {}
     
+    start_time = time.perf_counter()
     with torch.no_grad():
         # Store original NMS threshold
         original_nms_thresh = model.rpn.nms_thresh
         model.rpn.nms_thresh = rpn_nms_thresh
         
-        start_time = time.perf_counter()
-        
         # Forward pass through model components
         transformed_images, _ = model.transform(images, None)
         
+        # Time backbone separately
+        t0 = time.perf_counter()
         features = model.backbone(transformed_images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([("0", features)])
-        
         t1 = time.perf_counter()
+        
         proposals, _ = model.rpn(transformed_images, features, None)
         t2 = time.perf_counter()
+        
         detections, _ = model.roi_heads(features, proposals, transformed_images.image_sizes, None)
         t3 = time.perf_counter()
         
-        # Transform boxes back to original image space
         detections = model.transform.postprocess(detections, transformed_images.image_sizes, [img.shape[1:]])
         proposal_boxes = proposals[0]
         
@@ -453,16 +448,18 @@ def get_rpn_proposals_with_nms(model, image_path, rpn_nms_thresh):
             [img.shape[1:]]
         )[0]['boxes']
         
-        # Restore original NMS threshold
         model.rpn.nms_thresh = original_nms_thresh
     
-        times = {
-            'conv_time': t1 - start_time,
-            'rpn_time': t2 - t1,
-            'roi_time': t3 - t2,
-            'total_time': t3 - start_time
-        }
-        
+    end_time = time.perf_counter()
+    times = {
+        'backbone_time': t1 - t0,
+        'rpn_time': t2 - t1,
+        'roi_time': t3 - t2,
+        'total_time': end_time - start_time
+    }
+    
+    # print(f'Original RPN NMS threshold: {original_nms_thresh}')
+
     return img, orig_proposal_boxes, detections[0], times
 
 
@@ -483,7 +480,7 @@ if RUN_ZADANIE_2b:
     plot_dir.mkdir(exist_ok=True)
     
     # Test different RPN NMS thresholds
-    rpn_nms_thresholds = [0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    rpn_nms_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
     
     model.roi_heads.score_thresh = SCORE_THRESH
     model.roi_heads.nms_thresh = NMS_THRESH
@@ -494,11 +491,11 @@ if RUN_ZADANIE_2b:
         metrics = evaluate_rpn_nms_threshold(model, val_loader, nms_t, DEVICE)
         results.append({
             'rpn_nms_thresh': nms_t,
-            'map': metrics.coco_eval['bbox'].stats[0]
+            'ap': metrics.coco_eval['bbox'].stats[0]
         })
     
     visualize_rpn_nms_analysis(results, plot_dir)
-    
+    rpn_nms_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     timing_results = []
     
     for img_path in test_images:
@@ -535,7 +532,9 @@ if RUN_ZADANIE_2b:
             ax2 = fig.add_subplot(gs[i, 1])
             
             ax1.imshow(proposals_vis.permute(1, 2, 0))
-            ax1.set_title(f'RPN Proposals (thresh={nms_t})\n{len(proposals)} proposals\nRPN time: {times["rpn_time"]:.3f}s', fontsize=12)
+            ax1.set_title(f'RPN Proposals (thresh={nms_t})\n{len(proposals)} proposals\n' + 
+                          f'Backbone time: {times["backbone_time"]:.3f}s\n' +
+                          f'RPN time: {times["rpn_time"]:.3f}s', fontsize=12)
             ax1.axis('off')
             
             ax2.imshow(predictions_vis.permute(1, 2, 0))
@@ -543,8 +542,7 @@ if RUN_ZADANIE_2b:
             ax2.axis('off')
         
         plt.tight_layout()
-        plt.savefig(plot_dir / f'rpn_nms_analysis_{Path(img_path).stem}.png', 
-                   bbox_inches='tight', dpi=300)
+        plt.savefig(plot_dir / f'rpn_nms_analysis_{Path(img_path).stem}.png', bbox_inches='tight', dpi=300)
         plt.close()
     
     visualize_timing_analysis(timing_results, plot_dir, rpn_nms_thresholds)
